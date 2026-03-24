@@ -1,0 +1,145 @@
+body{
+font-family: Arial, Helvetica, sans-serif;
+background:#0f1117;
+color:white;
+text-align:center;
+margin:0;
+padding:20px;
+}
+
+h1{
+margin-bottom:30px;
+}
+
+/* TABLA */
+
+#tabla-periodica{
+display:grid;
+grid-template-columns: repeat(18, minmax(40px, 65px));
+grid-auto-rows:minmax(40px,65px);
+gap:6px;
+justify-content:center;
+overflow-x:auto;
+padding-bottom:10px;
+}
+
+/* ELEMENTO */
+
+.elemento{
+border-radius:8px;
+padding:4px;
+color:white;
+font-size:12px;
+display:flex;
+flex-direction:column;
+justify-content:space-between;
+box-shadow:0 0 6px rgba(0,0,0,0.4);
+transition:transform .2s;
+}
+
+.elemento:active{
+transform:scale(0.95);
+}
+
+.elemento:hover{
+transform:scale(1.08);
+box-shadow:0 0 12px rgba(255,255,255,0.2);
+}
+
+.numero{
+font-size:10px;
+text-align:left;
+}
+
+.simbolo{
+font-size:20px;
+font-weight:bold;
+text-align:center;
+}
+
+/* COLORES */
+
+.alcalinos{background:#e55353;}
+.alcalinoterreos{background:#f29e4c;}
+.transicion{background:#3b82c4;}
+.postransicion{background:#4a90e2;}
+.metaloides{background:#b48a2c;}
+.noMetales{background:#2fbf71;}
+.gases{background:#c96dd8;}
+.lantanidos{background:#00a8cc;}
+.actinidos{background:#c67c2f;}
+.desconocidos{background:#555;}
+
+/* LEYENDA */
+
+.leyenda{
+display:flex;
+justify-content:center;
+gap:15px;
+margin-top:40px;
+flex-wrap:wrap;
+}
+
+.item{
+padding:6px 12px;
+border-radius:5px;
+font-size:12px;
+}
+
+/* ---------- RESPONSIVE ---------- */
+
+/* TABLET */
+
+@media (max-width:1000px){
+
+#tabla-periodica{
+grid-template-columns: repeat(18, minmax(30px,50px));
+grid-auto-rows:minmax(30px,50px);
+}
+
+.simbolo{
+font-size:16px;
+}
+
+.numero{
+font-size:8px;
+}
+
+}
+
+/* CELULARES */
+
+@media (max-width:600px){
+
+body{
+padding:10px;
+}
+
+h1{
+font-size:20px;
+}
+
+#tabla-periodica{
+grid-template-columns: repeat(18, minmax(25px,40px));
+grid-auto-rows:minmax(25px,40px);
+gap:4px;
+}
+
+.simbolo{
+font-size:12px;
+}
+
+.numero{
+font-size:7px;
+}
+
+.leyenda{
+gap:8px;
+font-size:10px;
+}
+
+.item{
+padding:4px 8px;
+}
+
+}
