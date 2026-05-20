@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>VR PAC-MAN 3D · WebXR</title>
+<style>
+  :root {
+    --pac-yellow: #ffec3d;
+    --pac-blue: #2121ff;
+    --pac-red: #ff3030;
+    --pac-pink: #ff9cd0;
+    --pac-cyan: #00ffff;
+    --pac-orange: #ffb851;
+    --bg-deep: #04001a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', 'Monaco', monospace; color: #fff; touch-action: none; overscroll-behavior: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #startScreen {
+    position: fixed; inset: 0; z-index: 1000;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 30%, rgba(33,33,255,0.4) 0%, transparent 70%),
+      radial-gradient(ellipse 70% 50% at 50% 80%, rgba(255,236,61,0.15) 0%, transparent 70%),
+      linear-gradient(180deg, #0a0028 0%, #000005 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; text-align: center;
+  }
+  #startScreen::before {
+    content: ""; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,255,0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+  }
+
+  #title {
+    font-size: clamp(2.4rem, 9vw, 5.5rem);
+    color: var(--pac-yellow);
+    text-shadow: 0 0 20px var(--pac-yellow), 0 0 40px #ff8c00, 0 4px 0 #cc6600;
+    letter-spacing: 0.18em; font-weight: 900; margin-bottom: 0.4rem; position: relative;
+    animation: titleGlow 2s ease-in-out infinite alternate;
+  }
+  @keyframes titleGlow {
+    from { text-shadow: 0 0 20px var(--pac-yellow), 0 0 40px #ff8c00, 0 4px 0 #cc6600; }
+    to { text-shadow: 0 0 30px var(--pac-yellow), 0 0 60px #ffaa00, 0 4px 0 #cc6600; }
+  }
+  #subtitle {
+    color: var(--pac-cyan); font-size: clamp(0.85rem, 2.2vw, 1.15rem);
+    margin-bottom: 2.5rem; letter-spacing: 0.25em;
+    text-shadow: 0 0 12px var(--pac-cyan); position: relative;
+  }
+
+  .btn {
+    background: transparent; border: 3px solid var(--pac-yellow); color: var(--pac-yellow);
+    padding: 1rem 2.4rem; font-family: inherit; font-size: 1.05rem; font-weight: bold;
+    letter-spacing: 0.18em; margin: 0.45rem; cursor: pointer;
+    transition: all 0.18s ease;
+    text-shadow: 0 0 10px var(--pac-yellow);
+    box-shadow: 0 0 22px rgba(255,236,61,0.35), inset 0 0 18px rgba(255,236,61,0.08);
+    min-width: 240px; position: relative; overflow: hidden;
+  }
+  .btn:hover, .btn:active { background: var(--pac-yellow); color: #000; text-shadow: none; box-shadow: 0 0 45px var(--pac-yellow); transform: translateY(-2px); }
+  .btn.vr { border-color: var(--pac-cyan); color: var(--pac-cyan); text-shadow: 0 0 10px var(--pac-cyan); box-shadow: 0 0 22px rgba(0,255,255,0.35), inset 0 0 18px rgba(0,255,255,0.08); }
+  .btn.vr:hover, .btn.vr:active { background: var(--pac-cyan); color: #000; text-shadow: none; box-shadow: 0 0 45px var(--pac-cyan); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+
+  #instructions {
+    color: #aaa; margin-top: 2.5rem; font-size: 0.85rem; line-height: 1.8; max-width: 540px; position: relative;
+  }
+  #instructions strong { color: var(--pac-yellow); letter-spacing: 0.05em; }
+  #instructions em { color: var(--pac-cyan); font-style: normal; }
+
+  #hud {
+    position: fixed; top: 14px; left: 14px; right: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    pointer-events: none; z-index: 100;
+    font-size: clamp(0.95rem, 2.4vw, 1.35rem); font-weight: bold; letter-spacing: 0.12em;
+  }
+  #score { color: var(--pac-yellow); text-shadow: 0 0 12px var(--pac-yellow), 0 0 4px #000; }
+  #lives { color: var(--pac-red); text-shadow: 0 0 12px var(--pac-red), 0 0 4px #000; }
+  #power-timer {
+    position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
+    color: var(--pac-cyan); font-weight: bold; font-size: 0.95rem;
+    text-shadow: 0 0 10px var(--pac-cyan);
+    pointer-events: none; z-index: 100; opacity: 0;
+    transition: opacity 0.2s; letter-spacing: 0.2em;
+  }
+  #power-timer.show { opacity: 1; }
+
+  #message {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: clamp(1.8rem, 7vw, 4rem); color: var(--pac-yellow);
+    text-shadow: 0 0 25px var(--pac-yellow), 0 0 50px #ff8c00;
+    z-index: 200; text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s; letter-spacing: 0.18em; font-weight: 900;
+  }
+  #message.show { opacity: 1; }
+  #message .sub { display: block; font-size: 0.5em; margin-top: 0.5em; color: var(--pac-cyan); text-shadow: 0 0 15px var(--pac-cyan); letter-spacing: 0.3em; }
+
+  #touchControls {
+    position: fixed; bottom: 24px; left: 0; right: 0;
+    display: none; justify-content: space-between;
+    padding: 0 calc(env(safe-area-inset-left, 0px) + 24px) 0 calc(env(safe-area-inset-right, 0px) + 24px);
+    z-index: 150; pointer-events: none;
+  }
+  #touchControls.show { display: flex; }
+
+  .joystick {
+    width: 130px; height: 130px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(0,0,0,0.4));
+    border: 2px solid rgba(255,236,61,0.55);
+    box-shadow: 0 0 25px rgba(255,236,61,0.15), inset 0 0 25px rgba(0,0,0,0.4);
+    position: relative; pointer-events: auto; touch-action: none;
+  }
+  .joystick.right { border-color: rgba(0,255,255,0.55); box-shadow: 0 0 25px rgba(0,255,255,0.15), inset 0 0 25px rgba(0,0,0,0.4); }
+  .stick {
+    position: absolute; top: 50%; left: 50%;
+    width: 55px; height: 55px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff5b8, var(--pac-yellow));
+    box-shadow: 0 0 18px var(--pac-yellow);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: transform 0.06s linear;
+  }
+  .joystick.right .stick { background: radial-gradient(circle at 35% 35%, #ccffff, var(--pac-cyan)); box-shadow: 0 0 18px var(--pac-cyan); }
+
+  #vrUnsupported { color: #888; font-size: 0.78rem; margin-top: 0.5rem; }
+  .hidden { display: none !important; }
+
+  #fps {
+    position: fixed; bottom: 6px; right: 8px;
+    color: #666; font-size: 0.7rem;
+    z-index: 90; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="startScreen">
+    <div id="title">VR PAC-MAN</div>
+    <div id="subtitle">3D · INMERSIVO · WebXR</div>
+    <button id="startBtn" class="btn">JUGAR EN PANTALLA</button>
+    <button id="vrBtn" class="btn vr" disabled>COMPROBANDO VR…</button>
+    <div id="vrUnsupported"></div>
+    <div id="instructions">
+      <p><strong>VR:</strong> joystick izq = moverse · joystick der = girar (snap turn) · gira la cabeza naturalmente</p>
+      <p><strong>PC:</strong> <em>WASD</em>/flechas + ratón (click para capturar) · <em>Esc</em> libera</p>
+      <p><strong>Móvil / TV:</strong> joysticks táctiles · mando Bluetooth (Gamepad API)</p>
+      <p style="margin-top:1rem;color:#777;">Come todos los puntos para ganar. Las píldoras grandes asustan a los fantasmas — cómelos para puntos extra. Tienes 3 vidas.</p>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="score">PUNTOS&nbsp;000000</div>
+    <div id="lives">VIDAS&nbsp;❤❤❤</div>
+  </div>
+  <div id="power-timer">POWER&nbsp;0.0s</div>
+
+  <div id="message"></div>
+
+  <div id="touchControls">
+    <div class="joystick" id="joyMove"><div class="stick" id="stickMove"></div></div>
+    <div class="joystick right" id="joyLook"><div class="stick" id="stickLook"></div></div>
+  </div>
+
+  <div id="fps"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { VRButton } from 'three/addons/webxr/VRButton.js';
+  import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+  // ====================================================================
+  //  CONSTANTES DE JUEGO
+  // ====================================================================
+  const CELL          = 2.4;     // tamaño de celda en m
+  const WALL_H        = 2.6;     // altura muros
+  const EYE_H         = 1.55;    // altura ojos jugador (desktop)
+  const PLAYER_R      = 0.36;    // radio del jugador para colisiones
+  const MOVE_SPEED    = 3.6;     // m/s
+  const GHOST_SPEED   = 2.7;
+  const SCARED_SPEED  = 1.6;
+  const EATEN_SPEED   = 6.0;
+  const SNAP_TURN_DEG = 30;
+  const SCARED_TIME   = 7.5;     // segundos
+  const PLAYER_GHOST_HIT_R = 0.7;
+
+  // ====================================================================
+  //  LABERINTO  (19 × 21, simétrico)
+  //  # muro · . punto · o píldora · G ghost spawn · P player · T teleport · espacio = vacío
+  // ====================================================================
+  const MAZE_STR = [
+    "###################", // 0
+    "#........#........#", // 1
+    "#o##.###.#.###.##o#", // 2
+    "#.................#", // 3
+    "#.##.#.#####.#.##.#", // 4
+    "#....#...#...#....#", // 5
+    "####.###.#.###.####", // 6
+    "   #.#.......#.#   ", // 7
+    "####.#.#####.#.####", // 8
+    "T....#G G G G#....T", // 9
+    "####.#.#####.#.####", // 10
+    "   #.#.......#.#   ", // 11
+    "####.#.#####.#.####", // 12
+    "#........#........#", // 13
+    "#.##.###.#.###.##.#", // 14
+    "#o.#.....P.....#.o#", // 15
+    "##.#.#.#####.#.#.##", // 16
+    "#....#...#...#....#", // 17
+    "#.######.#.######.#", // 18
+    "#.................#", // 19
+    "###################"  // 20
+  ];
+  const COLS = MAZE_STR[0].length;
+  const ROWS = MAZE_STR.length;
+  const MAZE_W = COLS * CELL;
+  const MAZE_D = ROWS * CELL;
+
+  // === HELPERS DE MALLA ===
+  const gridToWorld = (col, row) => ({
+    x: (col + 0.5) * CELL - MAZE_W * 0.5,
+    z: (row + 0.5) * CELL - MAZE_D * 0.5
+  });
+  const worldToGrid = (x, z) => ({
+    col: Math.floor((x + MAZE_W * 0.5) / CELL),
+    row: Math.floor((z + MAZE_D * 0.5) / CELL)
+  });
+  const getCell = (col, row) => {
+    if (row < 0 || row >= ROWS) return ' ';
+    const r = MAZE_STR[row];
+    if (col < 0 || col >= COLS) return ' ';
+    return r[col];
+  };
+  const isWall = (col, row) => getCell(col, row) === '#';
+
+  // === EXTRAER PUNTOS / SPAWN / TELEPORTERS ===
+  const dotsList = [];
+  const ghostSpawns = [];
+  const teleporters = [];
+  let playerSpawn = { col: 9, row: 15 };
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const c = getCell(col, row);
+      if (c === '.')       dotsList.push({ col, row, isPower: false, collected: false, index: -1 });
+      else if (c === 'o')  dotsList.push({ col, row, isPower: true, collected: false, index: -1 });
+      else if (c === 'G')  ghostSpawns.push({ col, row });
+      else if (c === 'T')  teleporters.push({ col, row });
+      else if (c === 'P')  playerSpawn = { col, row };
+    }
+  }
+  const TOTAL_PICKUPS = dotsList.length;
+
+  // ====================================================================
+  //  SISTEMA DE AUDIO (Web Audio API procedural - sin assets externos)
+  // ====================================================================
+  let audioCtx = null;
+  function initAudio() {
+    if (audioCtx) return;
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { console.warn('Audio no disponible'); }
+  }
+  function blip(freq, dur, vol = 0.12, wave = 'square', t0 = 0) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime + t0;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = wave; osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.start(t); osc.stop(t + dur);
+  }
+  let dotTick = 0;
+  function playSound(type) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    switch (type) {
+      case 'dot':
+        blip(dotTick++ % 2 ? 988 : 740, 0.04, 0.08, 'square'); break;
+      case 'power':
+        blip(220, 0.15, 0.18, 'sawtooth');
+        blip(330, 0.15, 0.18, 'sawtooth', 0.1);
+        blip(440, 0.25, 0.18, 'sawtooth', 0.2); break;
+      case 'ghost':
+        blip(440, 0.08, 0.2, 'sine');
+        blip(660, 0.08, 0.2, 'sine', 0.08);
+        blip(880, 0.12, 0.2, 'sine', 0.16);
+        blip(1320, 0.18, 0.2, 'sine', 0.24); break;
+      case 'death':
+        for (let i = 0; i < 12; i++) blip(440 - i * 28, 0.12, 0.18, 'sawtooth', i * 0.08);
+        break;
+      case 'win':
+        [523, 659, 783, 1046, 1318].forEach((f, i) => blip(f, 0.18, 0.17, 'square', i * 0.15));
+        break;
+      case 'start':
+        blip(330, 0.08, 0.16, 'square');
+        blip(440, 0.08, 0.16, 'square', 0.08);
+        blip(660, 0.16, 0.16, 'square', 0.16); break;
+      case 'life':
+        blip(880, 0.08, 0.15, 'triangle');
+        blip(660, 0.08, 0.15, 'triangle', 0.08);
+        blip(440, 0.18, 0.15, 'triangle', 0.16); break;
+      case 'teleport':
+        blip(220, 0.25, 0.12, 'sine');
+        blip(550, 0.25, 0.12, 'sine', 0.1); break;
+    }
+  }
+
+  // ====================================================================
+  //  ESCENA / RENDERER
+  // ====================================================================
+  const canvas = document.getElementById('game');
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    canvas,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  try { renderer.xr.setFoveation(1.0); } catch(e) {}
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000008);
+  scene.fog = new THREE.Fog(0x000008, 6, 32);
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
+  camera.position.y = EYE_H;
+
+  // Grupo "rig" del jugador (translación del mundo VR)
+  const playerRig = new THREE.Group();
+  scene.add(playerRig);
+  playerRig.add(camera);
+
+  // Posicionar jugador en spawn
+  const sp = gridToWorld(playerSpawn.col, playerSpawn.row);
+  playerRig.position.set(sp.x, 0, sp.z);
+
+  // === LUCES ===
+  scene.add(new THREE.AmbientLight(0x404068, 0.55));
+  const dirLight = new THREE.DirectionalLight(0xfff0d0, 0.4);
+  dirLight.position.set(15, 25, 10);
+  scene.add(dirLight);
+
+  // Luz que sigue al jugador (linterna sutil)
+  const playerLight = new THREE.PointLight(0xffec3d, 0.7, 8, 1.5);
+  playerLight.position.set(0, EYE_H + 0.2, 0);
+  playerRig.add(playerLight);
+
+  // ====================================================================
+  //  TEXTURAS PROCEDURALES (sin assets externos)
+  // ====================================================================
+  function makeWallTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, '#1e3eff'); g.addColorStop(0.5, '#0a1f8c'); g.addColorStop(1, '#020833');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    // grid
+    x.strokeStyle = 'rgba(0,200,255,0.4)'; x.lineWidth = 1;
+    for (let i = 0; i <= 256; i += 32) {
+      x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 256); x.stroke();
+      x.beginPath(); x.moveTo(0, i); x.lineTo(256, i); x.stroke();
+    }
+    // banda neón
+    x.shadowColor = '#00ffff'; x.shadowBlur = 12;
+    x.strokeStyle = '#00ffff'; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(0, 128); x.lineTo(256, 128); x.stroke();
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+  function makeFloorTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 512;
+    const x = c.getContext('2d');
+    x.fillStyle = '#050015'; x.fillRect(0, 0, 512, 512);
+    x.strokeStyle = 'rgba(80,80,150,0.35)'; x.lineWidth = 1;
+    for (let i = 0; i < 512; i += 64) {
+      x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 512); x.stroke();
+      x.beginPath(); x.moveTo(0, i); x.lineTo(512, i); x.stroke();
+    }
+    // estrellas/pixel ruido
+    for (let i = 0; i < 80; i++) {
+      x.fillStyle = `rgba(255,255,255,${Math.random()*0.3})`;
+      x.fillRect(Math.random()*512, Math.random()*512, 1, 1);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(MAZE_W/8, MAZE_D/8);
+    return t;
+  }
+
+  // ====================================================================
+  //  CONSTRUIR LABERINTO  (InstancedMesh para rendimiento)
+  // ====================================================================
+  // FLOOR
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(MAZE_W + 8, MAZE_D + 8),
+    new THREE.MeshStandardMaterial({ map: makeFloorTexture(), color: 0xffffff, roughness: 0.9, metalness: 0.1 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+
+  // CIELO / tope visual
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(MAZE_W + 8, MAZE_D + 8),
+    new THREE.MeshBasicMaterial({ color: 0x000010, side: THREE.DoubleSide })
+  );
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = WALL_H + 0.2;
+  scene.add(ceiling);
+
+  // WALLS via InstancedMesh
+  let wallCount = 0;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (isWall(c, r)) wallCount++;
+
+  const wallTex = makeWallTexture();
+  const wallGeo = new THREE.BoxGeometry(CELL, WALL_H, CELL);
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wallTex, color: 0xffffff, roughness: 0.4, metalness: 0.3,
+    emissive: 0x000844, emissiveIntensity: 0.6
+  });
+  const wallInst = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
+  const tmpM = new THREE.Matrix4();
+  let wi = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (isWall(c, r)) {
+        const p = gridToWorld(c, r);
+        tmpM.makeTranslation(p.x, WALL_H / 2, p.z);
+        wallInst.setMatrixAt(wi++, tmpM);
+      }
+    }
+  }
+  wallInst.instanceMatrix.needsUpdate = true;
+  wallInst.frustumCulled = false;
+  scene.add(wallInst);
+
+  // DOTS (instanced)
+  let smallDots = 0, powerDots = 0;
+  dotsList.forEach(d => d.isPower ? powerDots++ : smallDots++);
+
+  const dotGeo = new THREE.SphereGeometry(0.11, 8, 6);
+  const dotMat = new THREE.MeshStandardMaterial({
+    color: 0xffe8a8, emissive: 0xff9020, emissiveIntensity: 1.2, roughness: 0.4
+  });
+  const dotInst = new THREE.InstancedMesh(dotGeo, dotMat, smallDots);
+  dotInst.frustumCulled = false;
+
+  const powerGeo = new THREE.SphereGeometry(0.28, 14, 12);
+  const powerMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xffaa00, emissiveIntensity: 1.5, roughness: 0.2
+  });
+  const powerInst = new THREE.InstancedMesh(powerGeo, powerMat, powerDots);
+  powerInst.frustumCulled = false;
+
+  let di = 0, pi = 0;
+  for (const d of dotsList) {
+    const p = gridToWorld(d.col, d.row);
+    tmpM.makeTranslation(p.x, 1.0, p.z);
+    if (d.isPower) { powerInst.setMatrixAt(pi, tmpM); d.index = pi++; }
+    else           { dotInst.setMatrixAt(di, tmpM);   d.index = di++; }
+  }
+  dotInst.instanceMatrix.needsUpdate = true;
+  powerInst.instanceMatrix.needsUpdate = true;
+  scene.add(dotInst); scene.add(powerInst);
+
+  // === MAPA RÁPIDO  grid -> dot index ===
+  const dotByKey = new Map();
+  for (const d of dotsList) dotByKey.set(d.col + ',' + d.row, d);
+
+  // ====================================================================
+  //  FANTASMAS
+  // ====================================================================
+  function createGhostMesh(color) {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.45 });
+    g.userData.bodyMat = bodyMat;
+    g.userData.baseColor = color;
+
+    // domo
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.52, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      bodyMat);
+    dome.position.y = 0.62;
+    g.add(dome);
+
+    // falda
+    const skirt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.52, 0.52, 0.62, 18, 1, true),
+      bodyMat);
+    skirt.position.y = 0.31;
+    g.add(skirt);
+
+    // base ondulada (3 pequeñas esferas en la parte inferior)
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bodyMat);
+      lobe.position.set(Math.cos(angle) * 0.36, 0.06, Math.sin(angle) * 0.36);
+      g.add(lobe);
+    }
+
+    // ojos
+    const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x080840 });
+    g.userData.eyes = [];
+    g.userData.pupils = [];
+    for (let s = -1; s <= 1; s += 2) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), eyeWhiteMat);
+      eye.position.set(s * 0.18, 0.7, 0.36);
+      g.add(eye); g.userData.eyes.push(eye);
+      const pup = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), pupilMat);
+      pup.position.set(s * 0.18, 0.7, 0.46);
+      g.add(pup); g.userData.pupils.push(pup);
+    }
+    return g;
+  }
+
+  // Materiales compartidos para estado "asustado"
+  const scaredMat = new THREE.MeshStandardMaterial({ color: 0x2020ff, emissive: 0x4040ff, emissiveIntensity: 0.7, roughness: 0.45 });
+  const scaredBlinkMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xeeeeee, emissiveIntensity: 0.9, roughness: 0.45 });
+
+  class Ghost {
+    constructor(color, spawnIdx, behavior) {
+      const spawn = ghostSpawns[spawnIdx % ghostSpawns.length];
+      this.color = color;
+      this.behavior = behavior;
+      this.startCol = spawn.col;
+      this.startRow = spawn.row;
+      this.col = spawn.col;
+      this.row = spawn.row;
+      this.targetCol = spawn.col;
+      this.targetRow = spawn.row;
+      this.dir = { dc: 0, dr: -1 };
+      this.scared = false;
+      this.eaten = false;
+      const wp = gridToWorld(spawn.col, spawn.row);
+      this.x = wp.x; this.z = wp.z;
+      this.mesh = createGhostMesh(color);
+      this.mesh.position.set(this.x, 0.05, this.z);
+      this.bobOff = Math.random() * Math.PI * 2;
+      scene.add(this.mesh);
+    }
+
+    setMaterial(mat) {
+      this.mesh.traverse(o => {
+        if (o.isMesh && o !== this.mesh.userData.eyes[0] &&
+            o !== this.mesh.userData.eyes[1] &&
+            o !== this.mesh.userData.pupils[0] &&
+            o !== this.mesh.userData.pupils[1]) {
+          if (o.material !== this.mesh.userData.bodyMat && mat !== this.mesh.userData.bodyMat) {
+            // ya está
+          }
+          o.material = mat;
+        }
+      });
+    }
+
+    update(dt, playerCol, playerRow, playerDirCol, playerDirRow, scaredEndsAt) {
+      const speed = this.eaten ? EATEN_SPEED : (this.scared ? SCARED_SPEED : GHOST_SPEED);
+
+      // Posición de la celda destino actual
+      const t = gridToWorld(this.targetCol, this.targetRow);
+      // si el target está envuelto por teleport, ajusta
+      const dx = t.x - this.x;
+      const dz = t.z - this.z;
+      const distSq = dx * dx + dz * dz;
+
+      if (distSq < 0.04) {
+        // llegada
+        this.col = this.targetCol;
+        this.row = this.targetRow;
+        this.x = t.x; this.z = t.z;
+
+        // si fue comido y volvió al spawn, reactivar
+        if (this.eaten) {
+          const dCol = Math.abs(this.col - this.startCol);
+          const dRow = Math.abs(this.row - this.startRow);
+          if (dCol + dRow < 1) this.eaten = false;
+        }
+
+        // elegir nueva dirección
+        this.chooseDirection(playerCol, playerRow, playerDirCol, playerDirRow);
+        this.targetCol = this.col + this.dir.dc;
+        this.targetRow = this.row + this.dir.dr;
+        // wrap horizontal por teleports
+        if (this.targetCol < 0) this.targetCol = COLS - 1;
+        else if (this.targetCol >= COLS) this.targetCol = 0;
+      } else {
+        const dist = Math.sqrt(distSq);
+        const step = speed * dt;
+        if (step >= dist) {
+          this.x = t.x; this.z = t.z;
+        } else {
+          const inv = step / dist;
+          this.x += dx * inv;
+          this.z += dz * inv;
+        }
+      }
+
+      // animación visual
+      const now = performance.now() * 0.001;
+      const bob = Math.sin(now * 3 + this.bobOff) * 0.06;
+      this.mesh.position.set(this.x, 0.08 + bob, this.z);
+      // mira en la dirección de movimiento
+      if (this.dir.dc !== 0 || this.dir.dr !== 0) {
+        this.mesh.rotation.y = Math.atan2(this.dir.dc, this.dir.dr);
+        for (const pup of this.mesh.userData.pupils) {
+          pup.position.z = 0.46 + this.dir.dr * 0.04;
+          pup.position.x = pup.position.x; // estable
+        }
+      }
+
+      // material según estado
+      const mat = this.mesh.userData.bodyMat;
+      if (this.eaten) {
+        // sólo ojos visibles
+        this.mesh.traverse(o => { if (o.isMesh) o.visible = false; });
+        this.mesh.userData.eyes.forEach(e => e.visible = true);
+        this.mesh.userData.pupils.forEach(p => p.visible = true);
+      } else {
+        this.mesh.traverse(o => { if (o.isMesh) o.visible = true; });
+        const remaining = scaredEndsAt - now;
+        if (this.scared) {
+          const useBlink = remaining < 2 && Math.floor(remaining * 5) % 2 === 0;
+          this.replaceBodyMaterial(useBlink ? scaredBlinkMat : scaredMat);
+        } else {
+          this.replaceBodyMaterial(mat);
+        }
+      }
+    }
+
+    replaceBodyMaterial(m) {
+      // los hijos 0..5 son el cuerpo + lóbulos (creados antes de los ojos)
+      // Los ojos y pupilas están en userData
+      const eyeSet = new Set([
+        ...this.mesh.userData.eyes,
+        ...this.mesh.userData.pupils
+      ]);
+      this.mesh.traverse(o => {
+        if (o.isMesh && !eyeSet.has(o)) o.material = m;
+      });
+    }
+
+    chooseDirection(playerCol, playerRow, playerDirCol, playerDirRow) {
+      let tx, ty;
+      if (this.eaten) {
+        tx = this.startCol; ty = this.startRow;
+      } else if (this.scared) {
+        // dirección aleatoria
+        tx = Math.random() * COLS;
+        ty = Math.random() * ROWS;
+      } else {
+        switch (this.behavior) {
+          case 'blinky':
+            tx = playerCol; ty = playerRow; break;
+          case 'pinky':
+            tx = playerCol + playerDirCol * 4;
+            ty = playerRow + playerDirRow * 4; break;
+          case 'inky':
+            tx = playerCol + playerDirCol * 2 - (this.col - playerCol);
+            ty = playerRow + playerDirRow * 2 - (this.row - playerRow); break;
+          case 'clyde':
+          default: {
+            const d = Math.hypot(playerCol - this.col, playerRow - this.row);
+            if (d > 7) { tx = playerCol; ty = playerRow; }
+            else       { tx = 0; ty = ROWS - 1; }
+          }
+        }
+      }
+
+      const opts = [
+        { dc: 1, dr: 0 }, { dc: -1, dr: 0 },
+        { dc: 0, dr: 1 }, { dc: 0, dr: -1 }
+      ];
+
+      let best = null, bestDist = Infinity;
+      const candidates = [];
+      for (const o of opts) {
+        // no reversa salvo necesidad
+        if (o.dc === -this.dir.dc && o.dr === -this.dir.dr) continue;
+        let nc = this.col + o.dc;
+        const nr = this.row + o.dr;
+        // wrap por teleport
+        if (nc < 0) nc = COLS - 1;
+        else if (nc >= COLS) nc = 0;
+        if (isWall(nc, nr)) continue;
+        candidates.push({ o, nc, nr });
+      }
+      if (candidates.length === 0) {
+        // forzar reversa
+        this.dir = { dc: -this.dir.dc, dr: -this.dir.dr };
+        return;
+      }
+      for (const c of candidates) {
+        const d = Math.hypot(c.nc - tx, c.nr - ty);
+        if (d < bestDist) { bestDist = d; best = c.o; }
+      }
+      this.dir = best;
+    }
+
+    reset() {
+      this.col = this.startCol; this.row = this.startRow;
+      this.targetCol = this.col; this.targetRow = this.row;
+      const w = gridToWorld(this.col, this.row);
+      this.x = w.x; this.z = w.z;
+      this.dir = { dc: 0, dr: -1 };
+      this.scared = false; this.eaten = false;
+      this.mesh.traverse(o => { if (o.isMesh) o.visible = true; });
+      this.replaceBodyMaterial(this.mesh.userData.bodyMat);
+      this.mesh.position.set(this.x, 0.08, this.z);
+    }
+  }
+
+  // Crear 4 fantasmas con personalidades clásicas
+  const ghosts = [
+    new Ghost(0xff3030, 0, 'blinky'),  // rojo - persigue directo
+    new Ghost(0xff9cd0, 1, 'pinky'),   // rosa - anticipa
+    new Ghost(0x00ffff, 2, 'inky'),    // cian - flanqueo
+    new Ghost(0xffb851, 3, 'clyde'),   // naranja - errático
+  ];
+
+  // ====================================================================
+  //  CONTROLADORES VR
+  // ====================================================================
+  const controllerL = renderer.xr.getController(0);
+  const controllerR = renderer.xr.getController(1);
+  playerRig.add(controllerL); playerRig.add(controllerR);
+
+  const ctrlFactory = new XRControllerModelFactory();
+  const gripL = renderer.xr.getControllerGrip(0);
+  const gripR = renderer.xr.getControllerGrip(1);
+  gripL.add(ctrlFactory.createControllerModel(gripL));
+  gripR.add(ctrlFactory.createControllerModel(gripR));
+  playerRig.add(gripL); playerRig.add(gripR);
+
+  // Línea de puntería tenue desde cada mando
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1.2)]);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffec3d, transparent: true, opacity: 0.5 });
+  controllerL.add(new THREE.Line(lineGeo, lineMat));
+  controllerR.add(new THREE.Line(lineGeo, lineMat.clone()));
+
+  // ====================================================================
+  //  HUD 3D (para VR) — panel pequeño bajo la mano izquierda
+  // ====================================================================
+  const hudCanvas = document.createElement('canvas');
+  hudCanvas.width = 512; hudCanvas.height = 160;
+  const hudCtx2d = hudCanvas.getContext('2d');
+  const hudTex = new THREE.CanvasTexture(hudCanvas);
+  const hudPanel = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.32, 0.1),
+    new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false })
+  );
+  hudPanel.position.set(0.06, -0.05, -0.18);
+  hudPanel.rotation.x = -0.5;
+  hudPanel.renderOrder = 999;
+  controllerL.add(hudPanel);
+
+  function drawVRHud() {
+    hudCtx2d.clearRect(0, 0, 512, 160);
+    hudCtx2d.fillStyle = 'rgba(0,0,30,0.85)';
+    hudCtx2d.fillRect(0, 0, 512, 160);
+    hudCtx2d.strokeStyle = '#ffec3d'; hudCtx2d.lineWidth = 4;
+    hudCtx2d.strokeRect(2, 2, 508, 156);
+    hudCtx2d.fillStyle = '#ffec3d';
+    hudCtx2d.font = 'bold 40px monospace';
+    hudCtx2d.fillText('PUNTOS', 24, 50);
+    hudCtx2d.fillStyle = '#fff';
+    hudCtx2d.fillText(String(score).padStart(6, '0'), 24, 100);
+    hudCtx2d.fillStyle = '#ff3030';
+    hudCtx2d.fillText('VIDAS', 280, 50);
+    hudCtx2d.fillStyle = '#fff';
+    hudCtx2d.fillText('♥'.repeat(Math.max(0, lives)), 280, 110);
+    hudTex.needsUpdate = true;
+  }
+
+  // ====================================================================
+  //  ESTADO DE JUEGO
+  // ====================================================================
+  let score = 0;
+  let lives = 3;
+  let gameState = 'menu'; // menu | playing | won | lost
+  let scaredEndsAt = 0;
+  let scaredCombo = 0;
+  let totalCollected = 0;
+  let invulnUntil = 0;     // breve invulnerabilidad tras morir
+
+  // === HUD 2D ===
+  const $score = document.getElementById('score');
+  const $lives = document.getElementById('lives');
+  const $message = document.getElementById('message');
+  const $hud = document.getElementById('hud');
+  const $powerTimer = document.getElementById('power-timer');
+
+  function updateHUD() {
+    $score.textContent = 'PUNTOS ' + String(score).padStart(6, '0');
+    $lives.textContent = 'VIDAS ' + '❤'.repeat(Math.max(0, lives)) + '♡'.repeat(Math.max(0, 3 - lives));
+  }
+  let msgTimer = null;
+  function showMessage(text, sub = '', ms = 0) {
+    $message.innerHTML = text + (sub ? `<span class="sub">${sub}</span>` : '');
+    $message.classList.add('show');
+    if (msgTimer) clearTimeout(msgTimer);
+    if (ms > 0) msgTimer = setTimeout(() => $message.classList.remove('show'), ms);
+  }
+  function hideMessage() { $message.classList.remove('show'); }
+  updateHUD();
+
+  // ====================================================================
+  //  CONTROLES
+  // ====================================================================
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyR' && (gameState === 'lost' || gameState === 'won')) restartGame(); });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // Mouse look (sólo desktop, requiere puntero capturado)
+  let mouseYaw = 0;
+  canvas.addEventListener('click', () => {
+    if (renderer.xr.isPresenting) return;
+    if (gameState === 'menu') return;
+    if (gameState === 'lost' || gameState === 'won') { restartGame(); return; }
+    canvas.requestPointerLock?.();
+  });
+  window.addEventListener('mousemove', e => {
+    if (document.pointerLockElement === canvas) {
+      mouseYaw -= e.movementX * 0.0022;
+    }
+  });
+
+  // Touch joysticks
+  const touchInput = { moveX: 0, moveY: 0, lookX: 0 };
+  function bindJoystick(rootId, stickId, key) {
+    const root = document.getElementById(rootId);
+    const stick = document.getElementById(stickId);
+    let pid = -1;
+    const reset = () => {
+      stick.style.transform = 'translate(-50%,-50%)';
+      touchInput[key + 'X'] = 0;
+      if (key === 'move') touchInput.moveY = 0;
+    };
+    root.addEventListener('pointerdown', e => {
+      pid = e.pointerId;
+      root.setPointerCapture(pid);
+      update(e);
+    });
+    root.addEventListener('pointermove', e => { if (e.pointerId === pid) update(e); });
+    root.addEventListener('pointerup', e => { if (e.pointerId === pid) { pid = -1; reset(); } });
+    root.addEventListener('pointercancel', e => { if (e.pointerId === pid) { pid = -1; reset(); } });
+    function update(e) {
+      const r = root.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const max = r.width / 2 - 18;
+      const d = Math.hypot(dx, dy);
+      if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+      stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      if (key === 'move') {
+        touchInput.moveX = dx / max;
+        touchInput.moveY = dy / max;
+      } else {
+        touchInput.lookX = dx / max;
+      }
+    }
+  }
+  bindJoystick('joyMove', 'stickMove', 'move');
+  bindJoystick('joyLook', 'stickLook', 'look');
+
+  function deadzone(v, dz = 0.18) { return Math.abs(v) < dz ? 0 : (v - Math.sign(v) * dz) / (1 - dz); }
+
+  function readGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const p of pads) {
+      if (!p) continue;
+      const ax = p.axes || [];
+      return {
+        moveX: deadzone(ax[0] || 0),
+        moveY: deadzone(ax[1] || 0),
+        lookX: deadzone(ax[2] || 0)
+      };
+    }
+    return null;
+  }
+
+  function readVR() {
+    const session = renderer.xr.getSession();
+    if (!session) return null;
+    let mx = 0, my = 0, tx = 0;
+    for (const src of session.inputSources) {
+      if (!src.gamepad) continue;
+      const ax = src.gamepad.axes;
+      // Estándar XR: trackpad en [0,1], thumbstick en [2,3]
+      const stickX = ax[2] !== undefined ? ax[2] : (ax[0] || 0);
+      const stickY = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
+      if (src.handedness === 'left')  { mx = deadzone(stickX); my = deadzone(stickY); }
+      else if (src.handedness === 'right') { tx = deadzone(stickX); }
+    }
+    return { moveX: mx, moveY: my, lookX: tx };
+  }
+
+  // ====================================================================
+  //  MOVIMIENTO Y COLISIONES
+  // ====================================================================
+  let yaw = 0;                  // rotación adicional del rig (snap turn / ratón)
+  let snapCooldown = false;
+  const tmpVec = new THREE.Vector3();
+  const tmpVec2 = new THREE.Vector3();
+
+  function collidesAt(x, z) {
+    const minCol = Math.floor((x - PLAYER_R + MAZE_W * 0.5) / CELL);
+    const maxCol = Math.floor((x + PLAYER_R + MAZE_W * 0.5) / CELL);
+    const minRow = Math.floor((z - PLAYER_R + MAZE_D * 0.5) / CELL);
+    const maxRow = Math.floor((z + PLAYER_R + MAZE_D * 0.5) / CELL);
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (isWall(c, r)) {
+          const cw = gridToWorld(c, r);
+          const nearestX = Math.max(cw.x - CELL * 0.5, Math.min(x, cw.x + CELL * 0.5));
+          const nearestZ = Math.max(cw.z - CELL * 0.5, Math.min(z, cw.z + CELL * 0.5));
+          const dx = x - nearestX, dz = z - nearestZ;
+          if (dx * dx + dz * dz < PLAYER_R * PLAYER_R) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function getCameraXZ() {
+    camera.getWorldPosition(tmpVec);
+    return { x: tmpVec.x, z: tmpVec.z };
+  }
+
+  function teleportRigToWorldXZ(targetX, targetZ) {
+    const cam = getCameraXZ();
+    const offX = cam.x - playerRig.position.x;
+    const offZ = cam.z - playerRig.position.z;
+    playerRig.position.x = targetX - offX;
+    playerRig.position.z = targetZ - offZ;
+  }
+
+  function tryMove(dx, dz) {
+    let cam = getCameraXZ();
+    if (!collidesAt(cam.x + dx, cam.z)) playerRig.position.x += dx;
+    cam = getCameraXZ();
+    if (!collidesAt(cam.x, cam.z + dz)) playerRig.position.z += dz;
+  }
+
+  function processSnapTurn(tx) {
+    if (Math.abs(tx) > 0.65) {
+      if (!snapCooldown) {
+        yaw -= Math.sign(tx) * THREE.MathUtils.degToRad(SNAP_TURN_DEG);
+        snapCooldown = true;
+        // pequeño feedback sonoro
+      }
+    } else if (Math.abs(tx) < 0.3) {
+      snapCooldown = false;
+    }
+  }
+
+  function updateInput(dt) {
+    let mx = 0, my = 0, tx = 0;
+    const inVR = renderer.xr.isPresenting;
+
+    if (inVR) {
+      const vr = readVR();
+      if (vr) { mx = vr.moveX; my = vr.moveY; tx = vr.lookX; }
+    } else {
+      // teclado
+      let kx = 0, ky = 0;
+      if (keys.KeyA || keys.ArrowLeft)  kx = -1;
+      if (keys.KeyD || keys.ArrowRight) kx =  1;
+      if (keys.KeyW || keys.ArrowUp)    ky = -1;
+      if (keys.KeyS || keys.ArrowDown)  ky =  1;
+      if (keys.KeyQ) tx = -1;
+      if (keys.KeyE) tx =  1;
+
+      // touch
+      const tm = touchInput;
+      mx = kx || tm.moveX;
+      my = ky || tm.moveY;
+      tx = tx || tm.lookX;
+
+      // gamepad físico (móvil + mando bluetooth)
+      const gp = readGamepad();
+      if (gp) {
+        if (gp.moveX) mx = gp.moveX;
+        if (gp.moveY) my = gp.moveY;
+        if (gp.lookX) tx = gp.lookX;
+      }
+    }
+
+    if (inVR) {
+      processSnapTurn(tx);
+    } else {
+      // turn fluido con joystick / Q-E ; mouse aporta yaw libre
+      yaw -= tx * 2.0 * dt;
+      yaw += (mouseYaw - yaw) * 1; // ratón sobrescribe
+    }
+    playerRig.rotation.y = yaw;
+
+    // Dirección de movimiento basada en la mirada
+    let forward;
+    if (inVR) {
+      forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+    } else {
+      forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, yaw, 0, 'YXZ'));
+    }
+    forward.y = 0;
+    if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+    forward.normalize();
+    const right = new THREE.Vector3(-forward.z, 0, forward.x);
+
+    const speed = MOVE_SPEED * dt;
+    const moveX =  right.x * mx * speed + forward.x * (-my) * speed;
+    const moveZ =  right.z * mx * speed + forward.z * (-my) * speed;
+
+    if (moveX || moveZ) tryMove(moveX, moveZ);
+
+    // Guardar dirección para AI de fantasmas
+    if (forward.lengthSq() > 1e-3) {
+      playerFwd.copy(forward);
+    }
+  }
+
+  const playerFwd = new THREE.Vector3(0, 0, -1);
+
+  // ====================================================================
+  //  TELEPORTADORES
+  // ====================================================================
+  function checkTeleport() {
+    const cam = getCameraXZ();
+    const g = worldToGrid(cam.x, cam.z);
+    for (const t of teleporters) {
+      if (t.col === g.col && t.row === g.row) {
+        const other = teleporters.find(o => o.row === t.row && o.col !== t.col);
+        if (other) {
+          const dest = gridToWorld(other.col, other.row);
+          // empuja al jugador "hacia adentro" del otro lado
+          const inwardX = other.col === 0 ? CELL * 0.7 : -CELL * 0.7;
+          teleportRigToWorldXZ(dest.x + inwardX, dest.z);
+          playSound('teleport');
+          return;
+        }
+      }
+    }
+  }
+
+  // ====================================================================
+  //  RECOLECCIÓN DE PUNTOS
+  // ====================================================================
+  const hiddenMat = new THREE.Matrix4().makeScale(0, 0, 0);
+
+  function checkPickups() {
+    const cam = getCameraXZ();
+    const g = worldToGrid(cam.x, cam.z);
+    const d = dotByKey.get(g.col + ',' + g.row);
+    if (!d || d.collected) return;
+    // distancia precisa (centro de celda)
+    const cw = gridToWorld(d.col, d.row);
+    const dx = cam.x - cw.x, dz = cam.z - cw.z;
+    if (dx * dx + dz * dz > 0.7 * 0.7) return;
+    d.collected = true;
+    totalCollected++;
+    if (d.isPower) {
+      powerInst.setMatrixAt(d.index, hiddenMat);
+      powerInst.instanceMatrix.needsUpdate = true;
+      score += 50;
+      triggerPowerMode();
+      playSound('power');
+      showMessage('¡POWER!', '', 700);
+    } else {
+      dotInst.setMatrixAt(d.index, hiddenMat);
+      dotInst.instanceMatrix.needsUpdate = true;
+      score += 10;
+      playSound('dot');
+    }
+    updateHUD();
+    if (totalCollected >= TOTAL_PICKUPS) winGame();
+  }
+
+  function triggerPowerMode() {
+    scaredEndsAt = performance.now() * 0.001 + SCARED_TIME;
+    scaredCombo = 0;
+    ghosts.forEach(g => { if (!g.eaten) g.scared = true; });
+  }
+  function updatePowerMode() {
+    if (scaredEndsAt > 0) {
+      const now = performance.now() * 0.001;
+      const remaining = scaredEndsAt - now;
+      if (remaining <= 0) {
+        scaredEndsAt = 0;
+        ghosts.forEach(g => g.scared = false);
+        $powerTimer.classList.remove('show');
+      } else {
+        $powerTimer.classList.add('show');
+        $powerTimer.textContent = 'POWER ' + remaining.toFixed(1) + 's';
+      }
+    }
+  }
+
+  // ====================================================================
+  //  COLISIÓN CON FANTASMAS
+  // ====================================================================
+  function checkGhosts() {
+    if (performance.now() < invulnUntil) return;
+    const cam = getCameraXZ();
+    for (const g of ghosts) {
+      if (g.eaten) continue;
+      const dx = g.x - cam.x;
+      const dz = g.z - cam.z;
+      if (dx * dx + dz * dz < PLAYER_GHOST_HIT_R * PLAYER_GHOST_HIT_R) {
+        if (g.scared) {
+          g.eaten = true; g.scared = false;
+          scaredCombo++;
+          const pts = 200 * Math.pow(2, scaredCombo - 1);
+          score += pts;
+          playSound('ghost');
+          showMessage('+' + pts, '', 900);
+          updateHUD();
+        } else {
+          playerDeath();
+          return;
+        }
+      }
+    }
+  }
+
+  function playerDeath() {
+    lives--;
+    playSound('death');
+    invulnUntil = performance.now() + 2500;
+    updateHUD();
+    if (lives <= 0) {
+      loseGame();
+    } else {
+      // respawn
+      const sp = gridToWorld(playerSpawn.col, playerSpawn.row);
+      teleportRigToWorldXZ(sp.x, sp.z);
+      yaw = 0; mouseYaw = 0;
+      ghosts.forEach(g => g.reset());
+      scaredEndsAt = 0; scaredCombo = 0;
+      $powerTimer.classList.remove('show');
+      showMessage('¡VIDA PERDIDA!', 'Quedan ' + lives, 1700);
+    }
+  }
+
+  function loseGame() {
+    gameState = 'lost';
+    showMessage('GAME OVER', 'Pulsa R o click para reiniciar', 0);
+  }
+  function winGame() {
+    gameState = 'won';
+    playSound('win');
+    showMessage('¡VICTORIA!', 'Pulsa R o click para reiniciar', 0);
+  }
+
+  function restartGame() {
+    score = 0; lives = 3; totalCollected = 0; scaredEndsAt = 0; scaredCombo = 0;
+    for (const d of dotsList) {
+      d.collected = false;
+      const p = gridToWorld(d.col, d.row);
+      tmpM.makeTranslation(p.x, 1.0, p.z);
+      if (d.isPower) powerInst.setMatrixAt(d.index, tmpM);
+      else           dotInst.setMatrixAt(d.index, tmpM);
+    }
+    dotInst.instanceMatrix.needsUpdate = true;
+    powerInst.instanceMatrix.needsUpdate = true;
+    ghosts.forEach(g => g.reset());
+    const sp = gridToWorld(playerSpawn.col, playerSpawn.row);
+    teleportRigToWorldXZ(sp.x, sp.z);
+    yaw = 0; mouseYaw = 0;
+    hideMessage();
+    updateHUD();
+    gameState = 'playing';
+    playSound('life');
+  }
+
+  // ====================================================================
+  //  LOOP PRINCIPAL
+  // ====================================================================
+  let lastT = performance.now();
+  let fpsAcc = 0, fpsFrames = 0, fpsT = lastT;
+  const $fps = document.getElementById('fps');
+
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    if (gameState === 'playing') {
+      updateInput(dt);
+      checkTeleport();
+      checkPickups();
+
+      const cam = getCameraXZ();
+      const pg = worldToGrid(cam.x, cam.z);
+      // Dirección del jugador en celdas
+      const ax = Math.abs(playerFwd.x), az = Math.abs(playerFwd.z);
+      const pdc = ax > az ? Math.sign(playerFwd.x) : 0;
+      const pdr = az > ax ? Math.sign(playerFwd.z) : 0;
+
+      for (const gh of ghosts) gh.update(dt, pg.col, pg.row, pdc, pdr, scaredEndsAt);
+      updatePowerMode();
+      checkGhosts();
+    }
+
+    // Anima las píldoras grandes
+    const t = now * 0.003;
+    for (const d of dotsList) {
+      if (!d.isPower || d.collected) continue;
+      const cw = gridToWorld(d.col, d.row);
+      const s = 1 + Math.sin(t * 2 + d.col + d.row) * 0.18;
+      tmpM.compose(
+        new THREE.Vector3(cw.x, 1.0 + Math.sin(t * 1.5 + d.col) * 0.1, cw.z),
+        new THREE.Quaternion(),
+        new THREE.Vector3(s, s, s)
+      );
+      powerInst.setMatrixAt(d.index, tmpM);
+    }
+    powerInst.instanceMatrix.needsUpdate = true;
+
+    drawVRHud();
+    renderer.render(scene, camera);
+
+    // FPS
+    fpsFrames++;
+    if (now - fpsT > 1000) {
+      $fps.textContent = Math.round(fpsFrames * 1000 / (now - fpsT)) + ' fps';
+      fpsT = now; fpsFrames = 0;
+    }
+  });
+
+  // ====================================================================
+  //  RESIZE / SESIÓN VR
+  // ====================================================================
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ====================================================================
+  //  MENÚ Y BOTONES
+  // ====================================================================
+  const $startScreen = document.getElementById('startScreen');
+  const $startBtn = document.getElementById('startBtn');
+  const $vrBtn = document.getElementById('vrBtn');
+  const $vrInfo = document.getElementById('vrUnsupported');
+  const $touch = document.getElementById('touchControls');
+
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
+  const hasMouse = matchMedia('(pointer: fine)').matches;
+
+  function showTouchControls() {
+    if (renderer.xr.isPresenting) { $touch.classList.remove('show'); return; }
+    if (isMobile || !hasMouse) $touch.classList.add('show');
+  }
+
+  $startBtn.addEventListener('click', async () => {
+    initAudio();
+    if (audioCtx?.state === 'suspended') await audioCtx.resume();
+    $startScreen.classList.add('hidden');
+    $hud.classList.remove('hidden');
+    showTouchControls();
+    gameState = 'playing';
+    playSound('start');
+  });
+
+  // Comprobar soporte VR
+  let hiddenVRButton = null;
+  if ('xr' in navigator) {
+    navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+      if (supported) {
+        $vrBtn.disabled = false;
+        $vrBtn.textContent = 'ENTRAR A VR';
+        hiddenVRButton = VRButton.createButton(renderer);
+        hiddenVRButton.style.display = 'none';
+        document.body.appendChild(hiddenVRButton);
+      } else {
+        $vrBtn.textContent = 'VR NO DISPONIBLE';
+        $vrInfo.textContent = 'Tu navegador o dispositivo no soporta WebXR inmersivo.';
+      }
+    }).catch(() => {
+      $vrBtn.textContent = 'VR NO DISPONIBLE';
+    });
+  } else {
+    $vrBtn.textContent = 'VR NO DISPONIBLE';
+    $vrInfo.textContent = 'WebXR no está disponible en este navegador.';
+  }
+
+  $vrBtn.addEventListener('click', async () => {
+    if (!hiddenVRButton) return;
+    initAudio();
+    if (audioCtx?.state === 'suspended') await audioCtx.resume();
+    hiddenVRButton.click();
+  });
+
+  renderer.xr.addEventListener('sessionstart', () => {
+    $startScreen.classList.add('hidden');
+    $hud.classList.add('hidden');  // usamos HUD 3D en VR
+    $touch.classList.remove('show');
+    if (gameState === 'menu') {
+      gameState = 'playing';
+      playSound('start');
+    }
+    // referencia de suelo
+    try { renderer.xr.setReferenceSpaceType('local-floor'); } catch(e) {}
+  });
+  renderer.xr.addEventListener('sessionend', () => {
+    $hud.classList.remove('hidden');
+    showTouchControls();
+  });
+
+  // Reinicio rápido también con teclado (R) y clic en mensaje
+  $message.addEventListener('click', () => {
+    if (gameState === 'lost' || gameState === 'won') restartGame();
+  });
+
+  // Prevenir scroll/zoom móvil accidental
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('touchmove', e => { if (e.target === canvas) e.preventDefault(); }, { passive: false });
+
+  </script>
+</body>
+</html>
